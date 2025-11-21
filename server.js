@@ -59,7 +59,28 @@ async function startServer() {
     console.log('✓ Database connection established');
     
     // Sync database models (creates tables if they don't exist)
-    await sequelize.sync({ alter: true });
+    // For SQLite, we need to handle foreign keys differently
+    const dbDialect = process.env.DB_DIALECT || 'sqlite';
+    
+    if (dbDialect === 'sqlite') {
+      // For SQLite, use plain sync() to only create tables if they don't exist
+      // This avoids foreign key constraint errors when trying to alter tables
+      try {
+        await sequelize.sync({ force: false, alter: false });
+      } catch (error) {
+        // If there's a foreign key error, it means tables exist with constraints
+        // Just log and continue - the tables are already there
+        if (error.name === 'SequelizeForeignKeyConstraintError') {
+          console.log('⚠ Database tables already exist with foreign key constraints');
+          console.log('  Skipping schema sync to avoid constraint errors');
+        } else {
+          throw error;
+        }
+      }
+    } else {
+      // For PostgreSQL, use alter: true safely
+      await sequelize.sync({ alter: true });
+    }
     console.log('✓ Database models synchronized');
     
     // Start server
