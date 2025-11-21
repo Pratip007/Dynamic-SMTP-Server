@@ -1,0 +1,490 @@
+const express = require('express');
+const { body, validationResult } = require('express-validator');
+const { SmtpConfig, LandingPage, LandingPageConfig, EmailLog } = require('../models');
+const { encrypt } = require('../utils/encryption');
+const { testConnection } = require('../services/smtpService');
+const router = express.Router();
+
+// ==================== SMTP Configs ====================
+
+/**
+ * GET /admin/smtp-configs
+ * List all SMTP configurations
+ */
+router.get('/smtp-configs', async (req, res) => {
+  try {
+    const configs = await SmtpConfig.findAll({
+      order: [['created_at', 'DESC']],
+      attributes: { exclude: ['password'] }, // Don't send password
+    });
+    
+    res.json({
+      success: true,
+      data: configs,
+    });
+  } catch (error) {
+    console.error('Error fetching SMTP configs:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch SMTP configs',
+    });
+  }
+});
+
+/**
+ * GET /admin/smtp-configs/:id
+ * Get single SMTP configuration
+ */
+router.get('/smtp-configs/:id', async (req, res) => {
+  try {
+    const config = await SmtpConfig.findByPk(req.params.id, {
+      attributes: { exclude: ['password'] },
+    });
+    
+    if (!config) {
+      return res.status(404).json({
+        success: false,
+        message: 'SMTP config not found',
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: config,
+    });
+  } catch (error) {
+    console.error('Error fetching SMTP config:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch SMTP config',
+    });
+  }
+});
+
+/**
+ * POST /admin/smtp-configs
+ * Create new SMTP configuration
+ */
+router.post(
+  '/smtp-configs',
+  [
+    body('name').notEmpty().withMessage('Name is required'),
+    body('host').notEmpty().withMessage('Host is required'),
+    body('port').isInt({ min: 1, max: 65535 }).withMessage('Valid port is required'),
+    body('username').notEmpty().withMessage('Username is required'),
+    body('password').notEmpty().withMessage('Password is required'),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: errors.array(),
+        });
+      }
+      
+      const { name, host, port, secure, username, password, provider } = req.body;
+      
+      // Encrypt password
+      const encryptedPassword = encrypt(password);
+      
+      const config = await SmtpConfig.create({
+        name,
+        host,
+        port: port || 587,
+        secure: secure || false,
+        username,
+        password: encryptedPassword,
+        provider: provider || 'custom',
+        is_active: true,
+      });
+      
+      res.status(201).json({
+        success: true,
+        message: 'SMTP config created successfully',
+        data: {
+          id: config.id,
+          name: config.name,
+          host: config.host,
+          port: config.port,
+          secure: config.secure,
+          username: config.username,
+          provider: config.provider,
+          is_active: config.is_active,
+        },
+      });
+    } catch (error) {
+      console.error('Error creating SMTP config:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to create SMTP config',
+      });
+    }
+  }
+);
+
+/**
+ * PUT /admin/smtp-configs/:id
+ * Update SMTP configuration
+ */
+router.put(
+  '/smtp-configs/:id',
+  [
+    body('name').optional().notEmpty().withMessage('Name cannot be empty'),
+    body('host').optional().notEmpty().withMessage('Host cannot be empty'),
+    body('port').optional().isInt({ min: 1, max: 65535 }).withMessage('Valid port is required'),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: errors.array(),
+        });
+      }
+      
+      const config = await SmtpConfig.findByPk(req.params.id);
+      if (!config) {
+        return res.status(404).json({
+          success: false,
+          message: 'SMTP config not found',
+        });
+      }
+      
+      const updateData = { ...req.body };
+      
+      // Encrypt password if provided
+      if (updateData.password) {
+        updateData.password = encrypt(updateData.password);
+      } else {
+        delete updateData.password;
+      }
+      
+      await config.update(updateData);
+      
+      res.json({
+        success: true,
+        message: 'SMTP config updated successfully',
+        data: {
+          id: config.id,
+          name: config.name,
+          host: config.host,
+          port: config.port,
+          secure: config.secure,
+          username: config.username,
+          provider: config.provider,
+          is_active: config.is_active,
+        },
+      });
+    } catch (error) {
+      console.error('Error updating SMTP config:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to update SMTP config',
+      });
+    }
+  }
+);
+
+/**
+ * DELETE /admin/smtp-configs/:id
+ * Delete SMTP configuration
+ */
+router.delete('/smtp-configs/:id', async (req, res) => {
+  try {
+    const config = await SmtpConfig.findByPk(req.params.id);
+    if (!config) {
+      return res.status(404).json({
+        success: false,
+        message: 'SMTP config not found',
+      });
+    }
+    
+    await config.destroy();
+    
+    res.json({
+      success: true,
+      message: 'SMTP config deleted successfully',
+    });
+  } catch (error) {
+    console.error('Error deleting SMTP config:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete SMTP config',
+    });
+  }
+});
+
+/**
+ * POST /admin/smtp-configs/:id/test
+ * Test SMTP connection
+ */
+router.post('/smtp-configs/:id/test', async (req, res) => {
+  try {
+    const result = await testConnection(req.params.id);
+    
+    res.json({
+      success: result.success,
+      message: result.message,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to test connection',
+    });
+  }
+});
+
+// ==================== Landing Pages ====================
+
+/**
+ * GET /admin/landing-pages
+ * List all landing pages
+ */
+router.get('/landing-pages', async (req, res) => {
+  try {
+    const pages = await LandingPage.findAll({
+      include: [{
+        model: LandingPageConfig,
+        include: [{
+          model: SmtpConfig,
+          attributes: ['id', 'name', 'host', 'provider'],
+        }],
+      }],
+      order: [['created_at', 'DESC']],
+    });
+    
+    res.json({
+      success: true,
+      data: pages,
+    });
+  } catch (error) {
+    console.error('Error fetching landing pages:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch landing pages',
+    });
+  }
+});
+
+/**
+ * POST /admin/landing-pages
+ * Create new landing page
+ */
+router.post(
+  '/landing-pages',
+  [
+    body('name').notEmpty().withMessage('Name is required'),
+    body('identifier').notEmpty().withMessage('Identifier is required'),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: errors.array(),
+        });
+      }
+      
+      const { name, identifier } = req.body;
+      
+      const page = await LandingPage.create({
+        name,
+        identifier,
+        is_active: true,
+      });
+      
+      res.status(201).json({
+        success: true,
+        message: 'Landing page created successfully',
+        data: page,
+      });
+    } catch (error) {
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        return res.status(400).json({
+          success: false,
+          message: 'Identifier already exists',
+        });
+      }
+      console.error('Error creating landing page:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to create landing page',
+      });
+    }
+  }
+);
+
+/**
+ * PUT /admin/landing-pages/:id/config
+ * Update landing page configuration (SMTP mapping and From field)
+ */
+router.put(
+  '/landing-pages/:id/config',
+  [
+    body('smtp_config_id').isInt().withMessage('Valid SMTP config ID is required'),
+    body('from_email').isEmail().withMessage('Valid from email is required'),
+    body('from_name').notEmpty().withMessage('From name is required'),
+    body('to_email').isEmail().withMessage('Valid to email is required'),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: errors.array(),
+        });
+      }
+      
+      const landingPage = await LandingPage.findByPk(req.params.id);
+      if (!landingPage) {
+        return res.status(404).json({
+          success: false,
+          message: 'Landing page not found',
+        });
+      }
+      
+      const { smtp_config_id, from_email, from_name, reply_to_email, to_email, subject_template } = req.body;
+      
+      // Check if SMTP config exists
+      const smtpConfig = await SmtpConfig.findByPk(smtp_config_id);
+      if (!smtpConfig) {
+        return res.status(404).json({
+          success: false,
+          message: 'SMTP config not found',
+        });
+      }
+      
+      // Create or update landing page config
+      const [config, created] = await LandingPageConfig.findOrCreate({
+        where: { landing_page_id: landingPage.id },
+        defaults: {
+          landing_page_id: landingPage.id,
+          smtp_config_id,
+          from_email,
+          from_name,
+          reply_to_email: reply_to_email || null,
+          to_email,
+          subject_template: subject_template || null,
+        },
+      });
+      
+      if (!created) {
+        await config.update({
+          smtp_config_id,
+          from_email,
+          from_name,
+          reply_to_email: reply_to_email || null,
+          to_email,
+          subject_template: subject_template || null,
+        });
+      }
+      
+      res.json({
+        success: true,
+        message: 'Landing page config updated successfully',
+        data: config,
+      });
+    } catch (error) {
+      console.error('Error updating landing page config:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to update landing page config',
+      });
+    }
+  }
+);
+
+/**
+ * DELETE /admin/landing-pages/:id
+ * Delete landing page
+ */
+router.delete('/landing-pages/:id', async (req, res) => {
+  try {
+    const landingPage = await LandingPage.findByPk(req.params.id);
+    if (!landingPage) {
+      return res.status(404).json({
+        success: false,
+        message: 'Landing page not found',
+      });
+    }
+    
+    // Delete associated config if exists
+    const config = await LandingPageConfig.findOne({
+      where: { landing_page_id: landingPage.id },
+    });
+    if (config) {
+      await config.destroy();
+    }
+    
+    // Delete landing page
+    await landingPage.destroy();
+    
+    res.json({
+      success: true,
+      message: 'Landing page deleted successfully',
+    });
+  } catch (error) {
+    console.error('Error deleting landing page:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete landing page',
+    });
+  }
+});
+
+/**
+ * GET /admin/email-logs
+ * Get email logs
+ */
+router.get('/email-logs', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = parseInt(req.query.offset) || 0;
+    
+    const logs = await EmailLog.findAll({
+      include: [
+        {
+          model: LandingPage,
+          attributes: ['id', 'name', 'identifier'],
+        },
+        {
+          model: SmtpConfig,
+          attributes: ['id', 'name', 'provider'],
+        },
+      ],
+      order: [['created_at', 'DESC']],
+      limit,
+      offset,
+    });
+    
+    const total = await EmailLog.count();
+    
+    res.json({
+      success: true,
+      data: logs,
+      pagination: {
+        total,
+        limit,
+        offset,
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching email logs:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch email logs',
+    });
+  }
+});
+
+module.exports = router;
+
