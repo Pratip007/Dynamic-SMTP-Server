@@ -520,11 +520,36 @@ function renderEmailLogs(logs) {
     }
     
     tbody.innerHTML = logs.map(log => {
-        const date = new Date(log.created_at).toLocaleString();
+        // Use sent_at if available, otherwise use created_at
+        const dateValue = log.sent_at || log.created_at;
+        
+        // Format date and time properly
+        let dateDisplay = 'N/A';
+        if (dateValue) {
+            try {
+                const date = new Date(dateValue);
+                if (!isNaN(date.getTime())) {
+                    // Format as: MM/DD/YYYY, HH:MM:SS AM/PM
+                    dateDisplay = date.toLocaleString('en-US', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: true
+                    });
+                }
+            } catch (e) {
+                console.error('Error formatting date:', e, dateValue);
+                dateDisplay = dateValue ? String(dateValue) : 'N/A';
+            }
+        }
+        
         const statusClass = `status-${log.status}`;
         return `
             <tr>
-                <td>${date}</td>
+                <td>${dateDisplay}</td>
                 <td>${log.LandingPage ? log.LandingPage.name : 'N/A'}</td>
                 <td>${log.recipient}</td>
                 <td>${log.subject}</td>
