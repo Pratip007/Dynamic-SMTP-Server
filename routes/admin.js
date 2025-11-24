@@ -13,10 +13,9 @@ const router = express.Router();
  */
 router.get('/smtp-configs', async (req, res) => {
   try {
-    const configs = await SmtpConfig.findAll({
-      order: [['created_at', 'DESC']],
-      attributes: { exclude: ['password'] }, // Don't send password
-    });
+    const configs = await SmtpConfig.find()
+      .select('-password') // Don't send password
+      .sort({ createdAt: -1 });
     
     res.json({
       success: true,
@@ -37,9 +36,8 @@ router.get('/smtp-configs', async (req, res) => {
  */
 router.get('/smtp-configs/:id', async (req, res) => {
   try {
-    const config = await SmtpConfig.findByPk(req.params.id, {
-      attributes: { exclude: ['password'] },
-    });
+    const config = await SmtpConfig.findById(req.params.id)
+      .select('-password');
     
     if (!config) {
       return res.status(404).json({
@@ -105,7 +103,8 @@ router.post(
         success: true,
         message: 'SMTP config created successfully',
         data: {
-          id: config.id,
+          _id: config._id,
+          id: config._id,
           name: config.name,
           host: config.host,
           port: config.port,
@@ -147,7 +146,7 @@ router.put(
         });
       }
       
-      const config = await SmtpConfig.findByPk(req.params.id);
+      const config = await SmtpConfig.findById(req.params.id);
       if (!config) {
         return res.status(404).json({
           success: false,
@@ -164,13 +163,16 @@ router.put(
         delete updateData.password;
       }
       
-      await config.update(updateData);
+      // Update fields
+      Object.assign(config, updateData);
+      await config.save();
       
       res.json({
         success: true,
         message: 'SMTP config updated successfully',
         data: {
-          id: config.id,
+          _id: config._id,
+          id: config._id,
           name: config.name,
           host: config.host,
           port: config.port,
@@ -196,15 +198,13 @@ router.put(
  */
 router.delete('/smtp-configs/:id', async (req, res) => {
   try {
-    const config = await SmtpConfig.findByPk(req.params.id);
+    const config = await SmtpConfig.findByIdAndDelete(req.params.id);
     if (!config) {
       return res.status(404).json({
         success: false,
         message: 'SMTP config not found',
       });
     }
-    
-    await config.destroy();
     
     res.json({
       success: true,
@@ -247,20 +247,24 @@ router.post('/smtp-configs/:id/test', async (req, res) => {
  */
 router.get('/landing-pages', async (req, res) => {
   try {
-    const pages = await LandingPage.findAll({
-      include: [{
-        model: LandingPageConfig,
-        include: [{
-          model: SmtpConfig,
-          attributes: ['id', 'name', 'host', 'provider'],
-        }],
-      }],
-      order: [['created_at', 'DESC']],
-    });
+    const pages = await LandingPage.find()
+      .sort({ createdAt: -1 });
+    
+    // Populate configs for each page
+    const pagesWithConfigs = await Promise.all(
+      pages.map(async (page) => {
+        const config = await LandingPageConfig.findOne({ landing_page_id: page._id })
+          .populate('smtp_config_id', '_id name host provider');
+        
+        const pageObj = page.toObject();
+        pageObj.LandingPageConfig = config || null;
+        return pageObj;
+      })
+    );
     
     res.json({
       success: true,
-      data: pages,
+      data: pagesWithConfigs,
     });
   } catch (error) {
     console.error('Error fetching landing pages:', error);
@@ -306,7 +310,7 @@ router.post(
         data: page,
       });
     } catch (error) {
-      if (error.name === 'SequelizeUniqueConstraintError') {
+      if (error.code === 11000) { // MongoDB duplicate key error
         return res.status(400).json({
           success: false,
           message: 'Identifier already exists',
@@ -328,7 +332,7 @@ router.post(
 router.put(
   '/landing-pages/:id/config',
   [
-    body('smtp_config_id').isInt().withMessage('Valid SMTP config ID is required'),
+    body('smtp_config_id').notEmpty().withMessage('Valid SMTP config ID is required'),
     body('from_email').isEmail().withMessage('Valid from email is required'),
     body('from_name').notEmpty().withMessage('From name is required'),
     body('to_email').isEmail().withMessage('Valid to email is required'),
@@ -344,7 +348,7 @@ router.put(
         });
       }
       
-      const landingPage = await LandingPage.findByPk(req.params.id);
+      const landingPage = await LandingPage.findById(req.params.id);
       if (!landingPage) {
         return res.status(404).json({
           success: false,
@@ -355,7 +359,7 @@ router.put(
       const { smtp_config_id, from_email, from_name, reply_to_email, to_email, subject_template } = req.body;
       
       // Check if SMTP config exists
-      const smtpConfig = await SmtpConfig.findByPk(smtp_config_id);
+      const smtpConfig = await SmtpConfig.findById(smtp_config_id);
       if (!smtpConfig) {
         return res.status(404).json({
           success: false,
@@ -363,30 +367,24 @@ router.put(
         });
       }
       
-      // Create or update landing page config
-      const [config, created] = await LandingPageConfig.findOrCreate({
-        where: { landing_page_id: landingPage.id },
-        defaults: {
-          landing_page_id: landingPage.id,
-          smtp_config_id,
+      // Create or update landing page config (upsert)
+      const config = await LandingPageConfig.findOneAndUpdate(
+        { landing_page_id: landingPage._id },
+        {
+          landing_page_id: landingPage._id,
+          smtp_config_id: smtp_config_id,
           from_email,
           from_name,
           reply_to_email: reply_to_email || null,
           to_email,
           subject_template: subject_template || null,
         },
-      });
-      
-      if (!created) {
-        await config.update({
-          smtp_config_id,
-          from_email,
-          from_name,
-          reply_to_email: reply_to_email || null,
-          to_email,
-          subject_template: subject_template || null,
-        });
-      }
+        {
+          upsert: true,
+          new: true,
+          runValidators: true,
+        }
+      );
       
       res.json({
         success: true,
@@ -409,7 +407,7 @@ router.put(
  */
 router.delete('/landing-pages/:id', async (req, res) => {
   try {
-    const landingPage = await LandingPage.findByPk(req.params.id);
+    const landingPage = await LandingPage.findById(req.params.id);
     if (!landingPage) {
       return res.status(404).json({
         success: false,
@@ -418,15 +416,10 @@ router.delete('/landing-pages/:id', async (req, res) => {
     }
     
     // Delete associated config if exists
-    const config = await LandingPageConfig.findOne({
-      where: { landing_page_id: landingPage.id },
-    });
-    if (config) {
-      await config.destroy();
-    }
+    await LandingPageConfig.deleteOne({ landing_page_id: landingPage._id });
     
     // Delete landing page
-    await landingPage.destroy();
+    await LandingPage.findByIdAndDelete(req.params.id);
     
     res.json({
       success: true,
@@ -450,23 +443,14 @@ router.get('/email-logs', async (req, res) => {
     const limit = parseInt(req.query.limit) || 50;
     const offset = parseInt(req.query.offset) || 0;
     
-    const logs = await EmailLog.findAll({
-      include: [
-        {
-          model: LandingPage,
-          attributes: ['id', 'name', 'identifier'],
-        },
-        {
-          model: SmtpConfig,
-          attributes: ['id', 'name', 'provider'],
-        },
-      ],
-      order: [['created_at', 'DESC']],
-      limit,
-      offset,
-    });
+    const logs = await EmailLog.find()
+      .populate('landing_page_id', '_id name identifier')
+      .populate('smtp_config_id', '_id name provider')
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .skip(offset);
     
-    const total = await EmailLog.count();
+    const total = await EmailLog.countDocuments();
     
     res.json({
       success: true,
@@ -487,4 +471,3 @@ router.get('/email-logs', async (req, res) => {
 });
 
 module.exports = router;
-

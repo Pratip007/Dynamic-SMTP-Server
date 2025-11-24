@@ -1,61 +1,52 @@
-const { DataTypes } = require('sequelize');
-const sequelize = require('../config/database');
+const { mongoose } = require('../config/mongodb');
 
-const SmtpConfig = sequelize.define('SmtpConfig', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
-  },
+const smtpConfigSchema = new mongoose.Schema({
   name: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    comment: 'Display name for this SMTP account (e.g., "Gmail Account 1")',
+    type: String,
+    required: true,
   },
   host: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    comment: 'SMTP server host (e.g., smtp.gmail.com)',
+    type: String,
+    required: true,
   },
   port: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    defaultValue: 587,
-    comment: 'SMTP server port (587 for TLS, 465 for SSL)',
+    type: Number,
+    required: true,
+    default: 587,
   },
   secure: {
-    type: DataTypes.BOOLEAN,
-    allowNull: false,
-    defaultValue: false,
-    comment: 'true for SSL (port 465), false for TLS (port 587)',
+    type: Boolean,
+    required: true,
+    default: false,
   },
   username: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    comment: 'SMTP username/email',
+    type: String,
+    required: true,
   },
   password: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    comment: 'Encrypted SMTP password',
+    type: String,
+    required: true, // Encrypted password
   },
   provider: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    defaultValue: 'custom',
-    comment: 'SMTP provider (gmail, sendgrid, ses, custom)',
+    type: String,
+    required: true,
+    default: 'custom',
+    enum: ['gmail', 'sendgrid', 'ses', 'custom'],
   },
   is_active: {
-    type: DataTypes.BOOLEAN,
-    allowNull: false,
-    defaultValue: true,
-    comment: 'Whether this SMTP config is active',
+    type: Boolean,
+    required: true,
+    default: true,
   },
 }, {
-  tableName: 'smtp_configs',
   timestamps: true,
-  underscored: true,
+  collection: 'smtp_configs',
 });
 
-module.exports = SmtpConfig;
+// Index for faster queries
+smtpConfigSchema.index({ is_active: 1 });
+smtpConfigSchema.index({ provider: 1 });
 
+const SmtpConfig = mongoose.models.SmtpConfig || mongoose.model('SmtpConfig', smtpConfigSchema);
+
+module.exports = SmtpConfig;

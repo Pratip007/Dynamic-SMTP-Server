@@ -1,55 +1,49 @@
-const { DataTypes } = require('sequelize');
-const sequelize = require('../config/database');
+const { mongoose } = require('../config/mongodb');
 
-const EmailLog = sequelize.define('EmailLog', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
-  },
+const emailLogSchema = new mongoose.Schema({
   landing_page_id: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    references: {
-      model: 'landing_pages',
-      key: 'id',
-    },
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'LandingPage',
+    required: false,
   },
   smtp_config_id: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    references: {
-      model: 'smtp_configs',
-      key: 'id',
-    },
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'SmtpConfig',
+    required: false,
   },
   recipient: {
-    type: DataTypes.STRING,
-    allowNull: false,
+    type: String,
+    required: true,
   },
   subject: {
-    type: DataTypes.STRING,
-    allowNull: false,
+    type: String,
+    required: true,
   },
   status: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    defaultValue: 'pending',
-    comment: 'Status: pending, sent, failed',
+    type: String,
+    required: true,
+    default: 'pending',
+    enum: ['pending', 'sent', 'failed'],
   },
   error_message: {
-    type: DataTypes.TEXT,
-    allowNull: true,
+    type: String,
+    required: false,
   },
   sent_at: {
-    type: DataTypes.DATE,
-    allowNull: true,
+    type: Date,
+    required: false,
   },
 }, {
-  tableName: 'email_logs',
   timestamps: true,
-  underscored: true,
+  collection: 'email_logs',
 });
 
-module.exports = EmailLog;
+// Indexes for faster queries
+emailLogSchema.index({ landing_page_id: 1 });
+emailLogSchema.index({ smtp_config_id: 1 });
+emailLogSchema.index({ status: 1 });
+emailLogSchema.index({ createdAt: -1 }); // For sorting by date
 
+const EmailLog = mongoose.models.EmailLog || mongoose.model('EmailLog', emailLogSchema);
+
+module.exports = EmailLog;

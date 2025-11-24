@@ -1,4 +1,47 @@
-# Quick Fix: Install Docker Compose
+# Quick Fixes for Common Issues
+
+## Issue 1: Permission Denied Error
+
+If you see `-bash: ./deploy.sh: Permission denied`, make the script executable:
+
+```bash
+chmod +x deploy.sh
+chmod +x install-docker-compose.sh
+```
+
+Then try again:
+```bash
+./deploy.sh
+```
+
+## Issue 2: Docker Permission Denied
+
+If you see `permission denied while trying to connect to the Docker daemon socket`, fix it with:
+
+```bash
+# Add your user to docker group
+sudo usermod -aG docker $USER
+
+# Apply the changes (choose one method):
+# Method 1: Logout and login again (recommended)
+exit
+# Then SSH back into the VM
+
+# Method 2: Apply without logout (alternative)
+newgrp docker
+```
+
+Then verify it works:
+```bash
+docker ps
+```
+
+If it works, try deployment again:
+```bash
+./deploy.sh
+```
+
+## Issue 3: Docker Compose Not Installed
 
 If you see the error "Docker Compose is not installed", follow these steps:
 

@@ -7,7 +7,7 @@ const { decrypt } = require('../utils/encryption');
  */
 async function createTransporter(smtpConfigId) {
   try {
-    const smtpConfig = await SmtpConfig.findByPk(smtpConfigId);
+    const smtpConfig = await SmtpConfig.findById(smtpConfigId);
     
     if (!smtpConfig) {
       throw new Error('SMTP config not found');
@@ -81,22 +81,27 @@ async function sendInquiryEmail(landingPageIdentifier, formData) {
   try {
     // Find landing page by identifier
     const landingPage = await LandingPage.findOne({
-      where: { identifier: landingPageIdentifier, is_active: true },
-      include: [{
-        model: LandingPageConfig,
-        include: [{
-          model: SmtpConfig,
-          where: { is_active: true },
-        }],
-      }],
+      identifier: landingPageIdentifier,
+      is_active: true,
     });
     
-    if (!landingPage || !landingPage.LandingPageConfig) {
-      throw new Error('Landing page not found or not configured');
+    if (!landingPage) {
+      throw new Error('Landing page not found or not active');
     }
     
-    const config = landingPage.LandingPageConfig;
-    const smtpConfig = config.SmtpConfig;
+    // Find landing page config with populated SMTP config
+    const config = await LandingPageConfig.findOne({
+      landing_page_id: landingPage._id,
+    }).populate({
+      path: 'smtp_config_id',
+      match: { is_active: true },
+    });
+    
+    if (!config || !config.smtp_config_id) {
+      throw new Error('Landing page not configured or SMTP config is not active');
+    }
+    
+    const smtpConfig = config.smtp_config_id;
     
     // Build email subject
     let subject = config.subject_template || 'New Inquiry from {{landingPageName}}';
@@ -135,12 +140,12 @@ This email was sent from ${landingPage.identifier}
     };
     
     // Send email
-    const result = await sendEmail(smtpConfig.id, emailOptions);
+    const result = await sendEmail(smtpConfig._id, emailOptions);
     
     // Log email
     await EmailLog.create({
-      landing_page_id: landingPage.id,
-      smtp_config_id: smtpConfig.id,
+      landing_page_id: landingPage._id,
+      smtp_config_id: smtpConfig._id,
       recipient: config.to_email,
       subject: subject,
       status: 'sent',
@@ -156,12 +161,12 @@ This email was sent from ${landingPage.identifier}
     // Log failed email
     try {
       const landingPage = await LandingPage.findOne({
-        where: { identifier: landingPageIdentifier },
+        identifier: landingPageIdentifier,
       });
       
       if (landingPage) {
         await EmailLog.create({
-          landing_page_id: landingPage.id,
+          landing_page_id: landingPage._id,
           recipient: 'unknown',
           subject: 'Failed to send',
           status: 'failed',
@@ -182,4 +187,3 @@ module.exports = {
   sendEmail,
   sendInquiryEmail,
 };
-

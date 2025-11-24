@@ -1,34 +1,29 @@
-const { DataTypes } = require('sequelize');
-const sequelize = require('../config/database');
+const { mongoose } = require('../config/mongodb');
 
-const LandingPage = sequelize.define('LandingPage', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
-  },
+const landingPageSchema = new mongoose.Schema({
   name: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    comment: 'Display name for landing page (e.g., "Product Page 1")',
+    type: String,
+    required: true,
   },
   identifier: {
-    type: DataTypes.STRING,
-    allowNull: false,
+    type: String,
+    required: true,
     unique: true,
-    comment: 'Unique identifier/slug (e.g., "product-page-1")',
   },
   is_active: {
-    type: DataTypes.BOOLEAN,
-    allowNull: false,
-    defaultValue: true,
-    comment: 'Whether this landing page is active',
+    type: Boolean,
+    required: true,
+    default: true,
   },
 }, {
-  tableName: 'landing_pages',
   timestamps: true,
-  underscored: true,
+  collection: 'landing_pages',
 });
 
-module.exports = LandingPage;
+// Index for faster queries
+landingPageSchema.index({ identifier: 1 }, { unique: true });
+landingPageSchema.index({ is_active: 1 });
 
+const LandingPage = mongoose.models.LandingPage || mongoose.model('LandingPage', landingPageSchema);
+
+module.exports = LandingPage;

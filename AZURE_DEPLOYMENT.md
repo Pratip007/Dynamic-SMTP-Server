@@ -104,17 +104,56 @@ docker compose version
 # docker-compose --version
 ```
 
-### 3.3 Logout and Login Again
+### 3.3 Apply Docker Group Changes (IMPORTANT!)
+
+After adding user to docker group, you **MUST** logout and login again:
 
 ```bash
 exit
 ```
 
-Then SSH back in to apply docker group changes.
+**Then SSH back into the VM:**
+```bash
+ssh azureuser@<PUBLIC_IP_ADDRESS>
+```
+
+**Verify Docker works without sudo:**
+```bash
+docker ps
+```
+
+If you see `permission denied` error, make sure you:
+1. Added user to docker group: `sudo usermod -aG docker $USER`
+2. Logged out completely: `exit`
+3. SSH'd back in
+
+**Alternative:** If you can't logout, use:
+```bash
+newgrp docker
+```
+Then test: `docker ps`
 
 ## Step 4: Deploy Application
 
-### 4.1 Clone Your Repository
+### 4.1 Verify Docker Permissions
+
+**Before proceeding, make sure Docker works without sudo:**
+
+```bash
+docker ps
+```
+
+If you get `permission denied` error:
+```bash
+# Add user to docker group
+sudo usermod -aG docker $USER
+
+# Logout and login again
+exit
+# Then SSH back in
+```
+
+### 4.2 Clone Your Repository
 
 ```bash
 # Install Git if not already installed
@@ -132,7 +171,7 @@ cd Dynamic-SMTP-Server
 scp -r . azureuser@<PUBLIC_IP>:/home/azureuser/smtp-server
 ```
 
-### 4.2 Create Environment File
+### 4.3 Create Environment File
 
 ```bash
 # Create .env file
@@ -146,18 +185,9 @@ Add the following content (adjust as needed):
 PORT=3000
 NODE_ENV=production
 
-# Database Configuration
-# For SQLite (default):
-DB_DIALECT=sqlite
-DB_STORAGE=/app/data/database.sqlite
-
-# For PostgreSQL (if using):
-# DB_DIALECT=postgres
-# DB_HOST=localhost
-# DB_PORT=5432
-# DB_NAME=smtp_db
-# DB_USER=smtp_user
-# DB_PASSWORD=your_secure_password
+# MongoDB Configuration (Required)
+# Format: mongodb+srv://username:password@cluster.mongodb.net/database?options
+MONGODB_URI=mongodb+srv://db:db@cluster0.rrt2feq.mongodb.net/Cluster0?retryWrites=true&w=majority
 
 # Security - Encryption Key (REQUIRED)
 # Generate a new key:
@@ -170,7 +200,7 @@ ENCRYPTION_KEY=your_generated_encryption_key_here
 
 **Save and exit:** `Ctrl+X`, then `Y`, then `Enter`
 
-### 4.3 Generate Encryption Key
+### 4.4 Generate Encryption Key
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
@@ -194,11 +224,24 @@ chmod +x install-docker-compose.sh
 
 ### 4.5 Build and Run with Docker
 
-**Option A: Using Docker Compose (Recommended)**
+**Option A: Using Deployment Script (Easiest)**
+
+```bash
+# Make deploy script executable
+chmod +x deploy.sh
+
+# Run deployment script
+./deploy.sh
+```
+
+**Option B: Using Docker Compose Manually**
 
 ```bash
 # Create data directory for database
 mkdir -p data
+
+# Make scripts executable (if needed)
+chmod +x *.sh
 
 # Build and start containers
 docker compose up -d

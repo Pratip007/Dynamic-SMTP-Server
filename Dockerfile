@@ -4,13 +4,6 @@ FROM node:18-alpine
 # Set working directory
 WORKDIR /app
 
-# Install dependencies for native modules (sqlite3, pg)
-RUN apk add --no-cache \
-    python3 \
-    make \
-    g++ \
-    sqlite
-
 # Copy package files
 COPY package*.json ./
 
@@ -19,9 +12,6 @@ RUN npm ci --only=production
 
 # Copy application files
 COPY . .
-
-# Create directory for database (if using SQLite)
-RUN mkdir -p /app/data
 
 # Expose port
 EXPOSE 3000
@@ -35,4 +25,3 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 
 # Start the application
 CMD ["node", "server.js"]
-

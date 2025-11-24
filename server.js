@@ -3,7 +3,7 @@ const cors = require('cors');
 const path = require('path');
 require('dotenv').config();
 
-const { sequelize } = require('./models');
+const { connectMongoDB, isConnected: isMongoConnected, disconnectMongoDB } = require('./config/mongodb');
 const apiRoutes = require('./routes/api');
 const adminRoutes = require('./routes/admin');
 
@@ -35,11 +35,15 @@ app.get('/admin', (req, res) => {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({
+  const health = {
     status: 'ok',
     message: 'SMTP Server is running',
     timestamp: new Date().toISOString(),
-  });
+    database: {
+      mongodb: isMongoConnected() ? 'connected' : 'disconnected'
+    }
+  };
+  res.json(health);
 });
 
 // Error handling middleware
@@ -54,34 +58,13 @@ app.use((err, req, res, next) => {
 // Initialize database and start server
 async function startServer() {
   try {
-    // Test database connection
-    await sequelize.authenticate();
-    console.log('✓ Database connection established');
-    
-    // Sync database models (creates tables if they don't exist)
-    // For SQLite, we need to handle foreign keys differently
-    const dbDialect = process.env.DB_DIALECT || 'sqlite';
-    
-    if (dbDialect === 'sqlite') {
-      // For SQLite, use plain sync() to only create tables if they don't exist
-      // This avoids foreign key constraint errors when trying to alter tables
-      try {
-        await sequelize.sync({ force: false, alter: false });
-      } catch (error) {
-        // If there's a foreign key error, it means tables exist with constraints
-        // Just log and continue - the tables are already there
-        if (error.name === 'SequelizeForeignKeyConstraintError') {
-          console.log('⚠ Database tables already exist with foreign key constraints');
-          console.log('  Skipping schema sync to avoid constraint errors');
-        } else {
-          throw error;
-        }
-      }
-    } else {
-      // For PostgreSQL, use alter: true safely
-      await sequelize.sync({ alter: true });
+    // Connect to MongoDB (required)
+    if (!process.env.MONGODB_URI && !process.env.MONGODB_CONNECTION_STRING) {
+      throw new Error('MONGODB_URI or MONGODB_CONNECTION_STRING environment variable is required');
     }
-    console.log('✓ Database models synchronized');
+    
+    await connectMongoDB();
+    console.log('✓ MongoDB connection established');
     
     // Start server
     app.listen(PORT, () => {
@@ -98,9 +81,13 @@ async function startServer() {
 // Handle graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\nShutting down gracefully...');
-  await sequelize.close();
+  
+  // Disconnect MongoDB
+  if (isMongoConnected()) {
+    await disconnectMongoDB();
+  }
+  
   process.exit(0);
 });
 
 startServer();
-

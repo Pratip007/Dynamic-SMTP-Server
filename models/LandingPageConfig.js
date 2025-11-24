@@ -1,61 +1,45 @@
-const { DataTypes } = require('sequelize');
-const sequelize = require('../config/database');
+const { mongoose } = require('../config/mongodb');
 
-const LandingPageConfig = sequelize.define('LandingPageConfig', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
-  },
+const landingPageConfigSchema = new mongoose.Schema({
   landing_page_id: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: 'landing_pages',
-      key: 'id',
-    },
-    comment: 'Foreign key to landing_pages',
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'LandingPage',
+    required: true,
   },
   smtp_config_id: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: 'smtp_configs',
-      key: 'id',
-    },
-    comment: 'Foreign key to smtp_configs',
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'SmtpConfig',
+    required: true,
   },
   from_email: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    comment: 'From email address (e.g., sales@company.com)',
+    type: String,
+    required: true,
   },
   from_name: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    comment: 'From name (e.g., "Sales Team")',
+    type: String,
+    required: true,
   },
   reply_to_email: {
-    type: DataTypes.STRING,
-    allowNull: true,
-    comment: 'Reply-to email address (optional)',
+    type: String,
+    required: false,
   },
   to_email: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    comment: 'Recipient email address where inquiries will be sent',
+    type: String,
+    required: true,
   },
   subject_template: {
-    type: DataTypes.STRING,
-    allowNull: true,
-    defaultValue: 'New Inquiry from {{landingPageName}}',
-    comment: 'Email subject template (can use {{variables}})',
+    type: String,
+    default: 'New Inquiry from {{landingPageName}}',
   },
 }, {
-  tableName: 'landing_page_configs',
   timestamps: true,
-  underscored: true,
+  collection: 'landing_page_configs',
 });
 
-module.exports = LandingPageConfig;
+// One config per landing page
+landingPageConfigSchema.index({ landing_page_id: 1 }, { unique: true });
+landingPageConfigSchema.index({ smtp_config_id: 1 });
 
+const LandingPageConfig = mongoose.models.LandingPageConfig || mongoose.model('LandingPageConfig', landingPageConfigSchema);
+
+module.exports = LandingPageConfig;

@@ -55,8 +55,12 @@ if [ ! -f .env ]; then
     fi
 fi
 
-# Create data directory if it doesn't exist
-mkdir -p data
+# Check if MONGODB_URI is set
+if ! grep -q "MONGODB_URI=" .env && ! grep -q "MONGODB_CONNECTION_STRING=" .env; then
+    echo "⚠️  MONGODB_URI or MONGODB_CONNECTION_STRING is not set in .env file."
+    echo "   MongoDB connection string is required."
+    exit 1
+fi
 
 # Check if ENCRYPTION_KEY is set
 if ! grep -q "ENCRYPTION_KEY=" .env || grep -q "ENCRYPTION_KEY=$" .env; then
