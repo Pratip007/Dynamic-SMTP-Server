@@ -54,7 +54,9 @@ function renderSmtpConfigs(configs) {
         return;
     }
     
-    container.innerHTML = configs.map(config => `
+    container.innerHTML = configs.map(config => {
+        const configId = String(config.id || config._id || '');
+        return `
         <div class="card">
             <div class="card-header">
                 <div class="card-title">${config.name}</div>
@@ -72,12 +74,13 @@ function renderSmtpConfigs(configs) {
                 <strong>Username:</strong> ${config.username}
             </div>
             <div class="card-actions">
-                <button class="btn btn-success btn-small" onclick="testSmtpConnectionById(${config.id})">Test</button>
-                <button class="btn btn-primary btn-small" onclick="editSmtpConfig(${config.id})">Edit</button>
-                <button class="btn btn-danger btn-small" onclick="deleteSmtpConfig(${config.id})">Delete</button>
+                <button class="btn btn-success btn-small" onclick="testSmtpConnectionById('${configId}')">Test</button>
+                <button class="btn btn-primary btn-small" onclick="editSmtpConfig('${configId}')">Edit</button>
+                <button class="btn btn-danger btn-small" onclick="deleteSmtpConfig('${configId}')">Delete</button>
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 function openSmtpModal(id = null) {
@@ -101,8 +104,9 @@ function openSmtpModal(id = null) {
 }
 
 function editSmtpConfig(id) {
-    if (!id) {
+    if (!id || id === 'undefined' || id === 'null') {
         showNotification('Invalid SMTP config ID', 'error');
+        console.error('Invalid SMTP config ID:', id);
         return;
     }
     openSmtpModal(id);
@@ -209,8 +213,9 @@ async function saveSmtpConfig(event) {
 }
 
 async function deleteSmtpConfig(id) {
-    if (!id) {
+    if (!id || id === 'undefined' || id === 'null') {
         showNotification('Invalid SMTP config ID', 'error');
+        console.error('Invalid SMTP config ID:', id);
         return;
     }
     
@@ -301,6 +306,9 @@ function renderLandingPages(pages) {
     
     container.innerHTML = pages.map(page => {
         const config = page.LandingPageConfig;
+        const pageId = String(page.id || page._id || '');
+        const smtpConfig = config && config.smtp_config_id ? (config.smtp_config_id.name || (config.SmtpConfig && config.SmtpConfig.name)) : null;
+        
         return `
             <div class="card">
                 <div class="card-header">
@@ -314,7 +322,7 @@ function renderLandingPages(pages) {
                 </div>
                 ${config ? `
                     <div class="card-info">
-                        <strong>SMTP:</strong> ${config.SmtpConfig.name}
+                        <strong>SMTP:</strong> ${smtpConfig || 'N/A'}
                     </div>
                     <div class="card-info">
                         <strong>From:</strong> ${config.from_name} &lt;${config.from_email}&gt;
@@ -324,10 +332,10 @@ function renderLandingPages(pages) {
                     </div>
                 ` : '<div class="card-info" style="color: #dc3545;"><strong>⚠ Not configured</strong></div>'}
                 <div class="card-actions">
-                    <button class="btn btn-primary btn-small" onclick="configureLandingPage(${page.id})">
+                    <button class="btn btn-primary btn-small" onclick="configureLandingPage('${pageId}')">
                         ${config ? 'Reconfigure' : 'Configure'}
                     </button>
-                    <button class="btn btn-danger btn-small" onclick="deleteLandingPage(${page.id})">
+                    <button class="btn btn-danger btn-small" onclick="deleteLandingPage('${pageId}')">
                         Delete
                     </button>
                 </div>
@@ -372,8 +380,9 @@ async function saveLandingPage(event) {
 }
 
 async function configureLandingPage(landingId) {
-    if (!landingId) {
+    if (!landingId || landingId === 'undefined' || landingId === 'null') {
         showNotification('Invalid landing page ID', 'error');
+        console.error('Invalid landing page ID:', landingId);
         return;
     }
     
@@ -384,7 +393,11 @@ async function configureLandingPage(landingId) {
         
         let existingConfig = null;
         if (pageData.success) {
-            const page = pageData.data.find(p => p.id == landingId);
+            const page = pageData.data.find(p => {
+                const pageId = String(p.id || p._id || '');
+                const searchId = String(landingId || '');
+                return pageId === searchId;
+            });
             if (page && page.LandingPageConfig) {
                 existingConfig = page.LandingPageConfig;
             }
@@ -397,13 +410,16 @@ async function configureLandingPage(landingId) {
         if (data.success) {
             const select = document.getElementById('config-smtp-id');
             select.innerHTML = '<option value="">Select SMTP Config</option>' +
-                data.data.map(config => 
-                    `<option value="${config.id}">${config.name} (${config.provider})</option>`
-                ).join('');
+                data.data.map(config => {
+                    const configId = String(config.id || config._id || '');
+                    return `<option value="${configId}">${config.name} (${config.provider})</option>`;
+                }).join('');
             
             // Pre-select existing SMTP config if reconfiguring
             if (existingConfig && existingConfig.smtp_config_id) {
-                select.value = existingConfig.smtp_config_id;
+                const smtpIdObj = existingConfig.smtp_config_id;
+                const smtpId = String(smtpIdObj.id || smtpIdObj._id || smtpIdObj);
+                select.value = smtpId;
             }
         }
         
@@ -433,8 +449,9 @@ async function configureLandingPage(landingId) {
 }
 
 async function deleteLandingPage(id) {
-    if (!id) {
+    if (!id || id === 'undefined' || id === 'null') {
         showNotification('Invalid landing page ID', 'error');
+        console.error('Invalid landing page ID:', id);
         return;
     }
     
@@ -467,7 +484,7 @@ async function saveLandingPageConfig(event) {
     
     const landingId = document.getElementById('config-landing-id').value;
     const data = {
-        smtp_config_id: parseInt(document.getElementById('config-smtp-id').value),
+        smtp_config_id: document.getElementById('config-smtp-id').value, // MongoDB uses ObjectId strings, not integers
         from_email: document.getElementById('config-from-email').value,
         from_name: document.getElementById('config-from-name').value,
         reply_to_email: document.getElementById('config-reply-to').value || null,

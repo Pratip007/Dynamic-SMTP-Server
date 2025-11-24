@@ -17,9 +17,16 @@ router.get('/smtp-configs', async (req, res) => {
       .select('-password') // Don't send password
       .sort({ createdAt: -1 });
     
+    // Ensure both id and _id are available for compatibility
+    const configsWithId = configs.map(config => {
+      const configObj = config.toObject();
+      configObj.id = configObj._id.toString();
+      return configObj;
+    });
+    
     res.json({
       success: true,
-      data: configs,
+      data: configsWithId,
     });
   } catch (error) {
     console.error('Error fetching SMTP configs:', error);
@@ -46,9 +53,13 @@ router.get('/smtp-configs/:id', async (req, res) => {
       });
     }
     
+    // Ensure both id and _id are available
+    const configObj = config.toObject();
+    configObj.id = configObj._id.toString();
+    
     res.json({
       success: true,
-      data: config,
+      data: configObj,
     });
   } catch (error) {
     console.error('Error fetching SMTP config:', error);
@@ -99,20 +110,13 @@ router.post(
         is_active: true,
       });
       
+      const configObj = config.toObject();
+      configObj.id = configObj._id.toString();
+      
       res.status(201).json({
         success: true,
         message: 'SMTP config created successfully',
-        data: {
-          _id: config._id,
-          id: config._id,
-          name: config.name,
-          host: config.host,
-          port: config.port,
-          secure: config.secure,
-          username: config.username,
-          provider: config.provider,
-          is_active: config.is_active,
-        },
+        data: configObj,
       });
     } catch (error) {
       console.error('Error creating SMTP config:', error);
@@ -167,20 +171,13 @@ router.put(
       Object.assign(config, updateData);
       await config.save();
       
+      const configObj = config.toObject();
+      configObj.id = configObj._id.toString();
+      
       res.json({
         success: true,
         message: 'SMTP config updated successfully',
-        data: {
-          _id: config._id,
-          id: config._id,
-          name: config.name,
-          host: config.host,
-          port: config.port,
-          secure: config.secure,
-          username: config.username,
-          provider: config.provider,
-          is_active: config.is_active,
-        },
+        data: configObj,
       });
     } catch (error) {
       console.error('Error updating SMTP config:', error);
@@ -257,7 +254,29 @@ router.get('/landing-pages', async (req, res) => {
           .populate('smtp_config_id', '_id name host provider');
         
         const pageObj = page.toObject();
-        pageObj.LandingPageConfig = config || null;
+        // Ensure both id and _id are strings
+        pageObj.id = String(pageObj._id);
+        pageObj._id = String(pageObj._id);
+        
+        pageObj.LandingPageConfig = config ? (() => {
+          const configObj = config.toObject();
+          // Handle populated smtp_config_id - it's an object with _id when populated
+          if (configObj.smtp_config_id) {
+            if (typeof configObj.smtp_config_id === 'object' && configObj.smtp_config_id._id) {
+              const smtpId = configObj.smtp_config_id._id;
+              configObj.smtp_config_id.id = String(smtpId);
+              configObj.smtp_config_id._id = String(smtpId);
+            } else {
+              // If smtp_config_id is just an ObjectId, convert it to string
+              configObj.smtp_config_id = String(configObj.smtp_config_id);
+            }
+          }
+          // Also ensure landing_page_id is a string
+          if (configObj.landing_page_id) {
+            configObj.landing_page_id = String(configObj.landing_page_id);
+          }
+          return configObj;
+        })() : null;
         return pageObj;
       })
     );
@@ -304,10 +323,13 @@ router.post(
         is_active: true,
       });
       
+      const pageObj = page.toObject();
+      pageObj.id = pageObj._id.toString();
+      
       res.status(201).json({
         success: true,
         message: 'Landing page created successfully',
-        data: page,
+        data: pageObj,
       });
     } catch (error) {
       if (error.code === 11000) { // MongoDB duplicate key error
@@ -443,18 +465,30 @@ router.get('/email-logs', async (req, res) => {
     const limit = parseInt(req.query.limit) || 50;
     const offset = parseInt(req.query.offset) || 0;
     
-    const logs = await EmailLog.find()
+      const logs = await EmailLog.find()
       .populate('landing_page_id', '_id name identifier')
       .populate('smtp_config_id', '_id name provider')
       .sort({ createdAt: -1 })
       .limit(limit)
       .skip(offset);
     
+    // Ensure both id and _id are available for populated fields
+    const logsWithId = logs.map(log => {
+      const logObj = log.toObject();
+      if (logObj.landing_page_id) {
+        logObj.landing_page_id.id = logObj.landing_page_id._id.toString();
+      }
+      if (logObj.smtp_config_id) {
+        logObj.smtp_config_id.id = logObj.smtp_config_id._id.toString();
+      }
+      return logObj;
+    });
+    
     const total = await EmailLog.countDocuments();
     
     res.json({
       success: true,
-      data: logs,
+      data: logsWithId,
       pagination: {
         total,
         limit,
