@@ -13,9 +13,30 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-# Check if Docker Compose is installed
-if ! command -v docker-compose &> /dev/null; then
-    echo "❌ Docker Compose is not installed. Please install Docker Compose first."
+# Check if Docker Compose is installed (try both v1 and v2)
+if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
+    echo "❌ Docker Compose is not installed."
+    echo ""
+    echo "To install Docker Compose:"
+    echo "  Option 1 (Recommended - Plugin version):"
+    echo "    sudo apt-get update"
+    echo "    sudo apt-get install -y docker-compose-plugin"
+    echo ""
+    echo "  Option 2 (Standalone version):"
+    echo "    sudo curl -L \"https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)\" -o /usr/local/bin/docker-compose"
+    echo "    sudo chmod +x /usr/local/bin/docker-compose"
+    echo ""
+    echo "  Or run: chmod +x install-docker-compose.sh && ./install-docker-compose.sh"
+    exit 1
+fi
+
+# Determine which docker compose command to use
+if docker compose version &> /dev/null; then
+    COMPOSE_CMD="docker compose"
+elif command -v docker-compose &> /dev/null; then
+    COMPOSE_CMD="docker-compose"
+else
+    echo "❌ Docker Compose not found"
     exit 1
 fi
 
@@ -48,14 +69,14 @@ echo "✅ Prerequisites check passed."
 
 # Stop existing containers if running
 echo "🛑 Stopping existing containers..."
-docker-compose down 2>/dev/null || true
+$COMPOSE_CMD down 2>/dev/null || true
 
 # Build and start containers
 echo "🔨 Building Docker image..."
-docker-compose build
+$COMPOSE_CMD build
 
 echo "🚀 Starting containers..."
-docker-compose up -d
+$COMPOSE_CMD up -d
 
 # Wait for container to be ready
 echo "⏳ Waiting for server to start..."
@@ -79,15 +100,15 @@ if docker ps | grep -q "dynamic-smtp-server"; then
         echo "   API Endpoint: http://$(hostname -I | awk '{print $1}'):3000/api/send-inquiry"
         echo "   Health Check: http://$(hostname -I | awk '{print $1}'):3000/health"
         echo ""
-        echo "📊 View logs: docker-compose logs -f"
-        echo "🛑 Stop server: docker-compose down"
+        echo "📊 View logs: $COMPOSE_CMD logs -f"
+        echo "🛑 Stop server: $COMPOSE_CMD down"
     else
         echo "⚠️  Server started but health check failed. Check logs:"
-        echo "   docker-compose logs"
+        echo "   $COMPOSE_CMD logs"
     fi
 else
     echo "❌ Container failed to start. Check logs:"
-    docker-compose logs
+    $COMPOSE_CMD logs
     exit 1
 fi
 

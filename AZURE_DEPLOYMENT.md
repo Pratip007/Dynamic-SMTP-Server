@@ -86,13 +86,22 @@ sudo sh get-docker.sh
 # Add user to docker group (to run docker without sudo)
 sudo usermod -aG docker $USER
 
-# Install Docker Compose
-sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-sudo chmod +x /usr/local/bin/docker-compose
+# Install Docker Compose (Plugin version - recommended)
+sudo apt-get update
+sudo apt-get install -y docker-compose-plugin
+
+# OR install standalone version (alternative):
+# sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+# sudo chmod +x /usr/local/bin/docker-compose
 
 # Verify installation
 docker --version
-docker-compose --version
+
+# Check Docker Compose (plugin version uses 'docker compose' with space)
+docker compose version
+
+# OR if using standalone version:
+# docker-compose --version
 ```
 
 ### 3.3 Logout and Login Again
@@ -169,7 +178,21 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 Copy the output and update `ENCRYPTION_KEY` in your `.env` file.
 
-### 4.4 Build and Run with Docker
+### 4.4 Install Docker Compose (if not already installed)
+
+```bash
+# If Docker Compose is not installed, install it:
+sudo apt-get update
+sudo apt-get install -y docker-compose-plugin
+
+# Or use the installation script:
+chmod +x install-docker-compose.sh
+./install-docker-compose.sh
+```
+
+**Note:** Docker Compose v2 (plugin) uses `docker compose` (with space) instead of `docker-compose` (with hyphen). Both work, but plugin version is recommended.
+
+### 4.5 Build and Run with Docker
 
 **Option A: Using Docker Compose (Recommended)**
 
@@ -178,10 +201,14 @@ Copy the output and update `ENCRYPTION_KEY` in your `.env` file.
 mkdir -p data
 
 # Build and start containers
-docker-compose up -d
+docker compose up -d
+# OR if using standalone version:
+# docker-compose up -d
 
 # View logs
-docker-compose logs -f
+docker compose logs -f
+# OR
+# docker-compose logs -f
 ```
 
 **Option B: Using Docker directly**
