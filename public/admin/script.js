@@ -564,10 +564,14 @@ function renderEmailLogs(logs) {
         }
         
         const statusClass = `status-${log.status}`;
+        const landingPageName = log.landing_page_id && log.landing_page_id.name 
+            ? log.landing_page_id.name 
+            : 'N/A';
+        
         return `
             <tr>
                 <td>${dateDisplay}</td>
-                <td>${log.LandingPage ? log.LandingPage.name : 'N/A'}</td>
+                <td>${landingPageName}</td>
                 <td>${log.recipient}</td>
                 <td>${log.subject}</td>
                 <td class="${statusClass}">${log.status}</td>

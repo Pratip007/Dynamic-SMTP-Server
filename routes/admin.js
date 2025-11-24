@@ -475,12 +475,31 @@ router.get('/email-logs', async (req, res) => {
     // Ensure both id and _id are available for populated fields
     const logsWithId = logs.map(log => {
       const logObj = log.toObject();
+      
+      // Handle landing_page_id - check if it's populated (object) or just an ObjectId
       if (logObj.landing_page_id) {
-        logObj.landing_page_id.id = logObj.landing_page_id._id.toString();
+        if (typeof logObj.landing_page_id === 'object' && logObj.landing_page_id._id) {
+          // It's populated, ensure id field exists
+          logObj.landing_page_id.id = logObj.landing_page_id._id.toString();
+          // Ensure name is available (should be from populate, but double-check)
+          if (!logObj.landing_page_id.name) {
+            logObj.landing_page_id.name = 'Unknown';
+          }
+        } else {
+          // It's just an ObjectId, set to null (landing page might be deleted)
+          logObj.landing_page_id = null;
+        }
       }
+      
+      // Handle smtp_config_id
       if (logObj.smtp_config_id) {
-        logObj.smtp_config_id.id = logObj.smtp_config_id._id.toString();
+        if (typeof logObj.smtp_config_id === 'object' && logObj.smtp_config_id._id) {
+          logObj.smtp_config_id.id = logObj.smtp_config_id._id.toString();
+        } else {
+          logObj.smtp_config_id = null;
+        }
       }
+      
       return logObj;
     });
     
