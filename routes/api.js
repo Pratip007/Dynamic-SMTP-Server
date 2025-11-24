@@ -25,7 +25,7 @@ async function corsMiddleware(req, res, next) {
     
     // Handle preflight requests
     if (req.method === 'OPTIONS') {
-      return res.sendStatus(200);
+      return res.status(200).end();
     }
   } catch (error) {
     console.error('CORS check error:', error);
@@ -46,6 +46,12 @@ router.use(corsMiddleware);
  * Handle CORS preflight requests
  */
 router.options('/send-inquiry', (req, res) => {
+  // CORS headers are already set by corsMiddleware, but ensure they're here too
+  const origin = req.headers.origin || '*';
+  res.header('Access-Control-Allow-Origin', origin);
+  res.header('Access-Control-Allow-Methods', 'POST, OPTIONS, GET');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.header('Access-Control-Max-Age', '86400');
   res.sendStatus(200);
 });
 
@@ -92,14 +98,14 @@ router.post(
       // Send inquiry email
       const result = await sendInquiryEmail(landingPageId, formData);
       
-      res.json({
+      return res.json({
         success: true,
         message: result.message,
         messageId: result.messageId,
       });
     } catch (error) {
       console.error('Error sending inquiry:', error);
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         message: error.message || 'Failed to send inquiry email',
       });
