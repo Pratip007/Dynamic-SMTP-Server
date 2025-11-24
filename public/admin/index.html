@@ -16,6 +16,7 @@
         <nav class="tabs">
             <button class="tab-btn active" data-tab="smtp">SMTP Configs</button>
             <button class="tab-btn" data-tab="landing">Landing Pages</button>
+            <button class="tab-btn" data-tab="cors">CORS Origins</button>
             <button class="tab-btn" data-tab="logs">Email Logs</button>
         </nav>
 
@@ -38,6 +39,23 @@
             </div>
             <div id="landing-list" class="cards-grid">
                 <p>Loading landing pages...</p>
+            </div>
+        </div>
+
+        <!-- CORS Origins Tab -->
+        <div id="cors-tab" class="tab-content">
+            <div class="section-header">
+                <h2>Allowed CORS Origins</h2>
+                <button class="btn btn-primary" onclick="openCorsModal()">+ Add Origin</button>
+            </div>
+            <div class="info-box" style="margin-bottom: 20px;">
+                <strong>ℹ️ About CORS Origins:</strong>
+                Add domains that are allowed to make requests to your SMTP server. 
+                Use <code>*</code> to allow all origins (not recommended for production).
+                Origins should be in format: <code>https://example.com</code> or <code>http://localhost:3000</code>
+            </div>
+            <div id="cors-list" class="cards-grid">
+                <p>Loading allowed origins...</p>
             </div>
         </div>
 
@@ -177,6 +195,35 @@
                 <div class="form-actions">
                     <button type="button" class="btn btn-secondary" onclick="closeModal('landing-config-modal')">Cancel</button>
                     <button type="submit" class="btn btn-primary">Save Configuration</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- CORS Origin Modal -->
+    <div id="cors-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('cors-modal')">&times;</span>
+            <h2 id="cors-modal-title">Add Allowed Origin</h2>
+            <form id="cors-form" onsubmit="saveCorsOrigin(event)">
+                <input type="hidden" id="cors-id">
+                <div class="form-group">
+                    <label>Origin *</label>
+                    <input type="text" id="cors-origin" required placeholder="https://example.com or *">
+                    <small>Enter a full URL (e.g., https://example.com) or * to allow all origins</small>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <input type="text" id="cors-description" placeholder="Optional description">
+                </div>
+                <div class="form-group">
+                    <label>Active</label>
+                    <input type="checkbox" id="cors-is-active" checked>
+                    <small>Inactive origins will be ignored</small>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('cors-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
                 </div>
             </form>
         </div>

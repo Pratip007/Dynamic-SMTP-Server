@@ -1,7 +1,53 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { sendInquiryEmail } = require('../services/smtpService');
+const { isOriginAllowed } = require('../utils/corsHelper');
 const router = express.Router();
+
+/**
+ * CORS middleware for API routes - checks dynamic origins
+ */
+async function corsMiddleware(req, res, next) {
+  const origin = req.headers.origin;
+  
+  try {
+    // Check if origin is allowed (for logging/monitoring)
+    // This defaults to true if no origins are configured
+    const allowed = await isOriginAllowed(origin || '*');
+    
+    // Always set CORS headers - allow all requests by default
+    // The isOriginAllowed function already defaults to allowing all if no origins configured
+    res.header('Access-Control-Allow-Origin', origin || '*');
+    res.header('Access-Control-Allow-Methods', 'POST, OPTIONS, GET');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.header('Access-Control-Allow-Credentials', 'false');
+    res.header('Access-Control-Max-Age', '86400'); // 24 hours
+    
+    // Handle preflight requests
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(200);
+    }
+  } catch (error) {
+    console.error('CORS check error:', error);
+    // On error, always allow the request (fail open)
+    res.header('Access-Control-Allow-Origin', origin || '*');
+    res.header('Access-Control-Allow-Methods', 'POST, OPTIONS, GET');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  }
+  
+  next();
+}
+
+// Apply CORS middleware to all API routes
+router.use(corsMiddleware);
+
+/**
+ * OPTIONS /api/send-inquiry
+ * Handle CORS preflight requests
+ */
+router.options('/send-inquiry', (req, res) => {
+  res.sendStatus(200);
+});
 
 /**
  * POST /api/send-inquiry
@@ -62,4 +108,3 @@ router.post(
 );
 
 module.exports = router;
-

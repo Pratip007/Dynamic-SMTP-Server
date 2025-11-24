@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupTabs();
     loadSmtpConfigs();
     loadLandingPages();
+    loadAllowedOrigins();
     loadEmailLogs();
 });
 
@@ -26,6 +27,7 @@ function setupTabs() {
             // Load data if needed
             if (tab === 'smtp') loadSmtpConfigs();
             else if (tab === 'landing') loadLandingPages();
+            else if (tab === 'cors') loadAllowedOrigins();
             else if (tab === 'logs') loadEmailLogs();
         });
     });
@@ -593,6 +595,175 @@ window.onclick = function(event) {
         }
     });
 };
+
+// ==================== CORS Origins ====================
+async function loadAllowedOrigins() {
+    try {
+        const res = await fetch(`${API_BASE}/allowed-origins`);
+        const data = await res.json();
+        
+        if (data.success) {
+            renderAllowedOrigins(data.data);
+        }
+    } catch (error) {
+        console.error('Error loading allowed origins:', error);
+        showNotification('Error loading allowed origins', 'error');
+    }
+}
+
+function renderAllowedOrigins(origins) {
+    const container = document.getElementById('cors-list');
+    
+    if (origins.length === 0) {
+        container.innerHTML = '<div class="empty-state"><h3>No allowed origins found</h3><p>Add your first allowed origin to get started. Use <code>*</code> to allow all origins.</p></div>';
+        return;
+    }
+    
+    container.innerHTML = origins.map(origin => {
+        const originId = String(origin.id || origin._id || '');
+        return `
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title"><code>${origin.origin}</code></div>
+                    <span class="badge ${origin.is_active ? 'badge-active' : 'badge-inactive'}">
+                        ${origin.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                </div>
+                ${origin.description ? `
+                    <div class="card-info">
+                        <strong>Description:</strong> ${origin.description}
+                    </div>
+                ` : ''}
+                <div class="card-info">
+                    <strong>Created:</strong> ${origin.createdAt ? new Date(origin.createdAt).toLocaleDateString() : 'N/A'}
+                </div>
+                <div class="card-actions">
+                    <button class="btn btn-primary btn-small" onclick="editCorsOrigin('${originId}')">Edit</button>
+                    <button class="btn btn-danger btn-small" onclick="deleteCorsOrigin('${originId}')">Delete</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function openCorsModal(id = null) {
+    document.getElementById('cors-form').reset();
+    document.getElementById('cors-modal-title').textContent = id ? 'Edit Allowed Origin' : 'Add Allowed Origin';
+    document.getElementById('cors-id').value = id || '';
+    document.getElementById('cors-is-active').checked = true;
+    
+    document.getElementById('cors-modal').style.display = 'block';
+    
+    if (id) {
+        loadCorsOrigin(id);
+    }
+}
+
+async function loadCorsOrigin(id) {
+    try {
+        const res = await fetch(`${API_BASE}/allowed-origins`);
+        const data = await res.json();
+        
+        if (data.success) {
+            const origin = data.data.find(o => String(o.id || o._id) === String(id));
+            if (origin) {
+                document.getElementById('cors-origin').value = origin.origin || '';
+                document.getElementById('cors-description').value = origin.description || '';
+                document.getElementById('cors-is-active').checked = origin.is_active !== false;
+            }
+        }
+    } catch (error) {
+        console.error('Error loading allowed origin:', error);
+        showNotification('Error loading allowed origin', 'error');
+    }
+}
+
+function editCorsOrigin(id) {
+    if (!id || id === 'undefined' || id === 'null') {
+        showNotification('Invalid origin ID', 'error');
+        return;
+    }
+    openCorsModal(id);
+}
+
+async function saveCorsOrigin(event) {
+    event.preventDefault();
+    
+    const id = document.getElementById('cors-id').value;
+    const isEdit = id && id.trim() !== '';
+    
+    const data = {
+        origin: document.getElementById('cors-origin').value.trim(),
+        description: document.getElementById('cors-description').value.trim(),
+        is_active: document.getElementById('cors-is-active').checked,
+    };
+    
+    if (!data.origin) {
+        showNotification('Origin is required', 'error');
+        return;
+    }
+    
+    try {
+        const url = isEdit ? `${API_BASE}/allowed-origins/${id}` : `${API_BASE}/allowed-origins`;
+        const method = isEdit ? 'PUT' : 'POST';
+        
+        const res = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        
+        // Check if response is JSON
+        const contentType = res.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            const text = await res.text();
+            console.error('Non-JSON response received:', text.substring(0, 200));
+            throw new Error(`Server returned ${res.status} ${res.statusText}. Response was not JSON.`);
+        }
+        
+        const result = await res.json();
+        
+        if (result.success) {
+            showNotification(result.message || (isEdit ? 'Allowed origin updated successfully' : 'Allowed origin created successfully'), 'success');
+            closeModal('cors-modal');
+            loadAllowedOrigins();
+        } else {
+            const errorMsg = result.message || result.errors?.[0]?.msg || 'Failed to save';
+            showNotification(errorMsg, 'error');
+        }
+    } catch (error) {
+        console.error('Error saving allowed origin:', error);
+        showNotification('Error saving allowed origin: ' + (error.message || 'Please check your connection and server logs'), 'error');
+    }
+}
+
+async function deleteCorsOrigin(id) {
+    if (!id || id === 'undefined' || id === 'null') {
+        showNotification('Invalid origin ID', 'error');
+        return;
+    }
+    
+    if (!confirm('Are you sure you want to delete this allowed origin?')) return;
+    
+    try {
+        const res = await fetch(`${API_BASE}/allowed-origins/${id}`, { 
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const result = await res.json();
+        
+        if (result.success) {
+            showNotification('Allowed origin deleted successfully', 'success');
+            loadAllowedOrigins();
+        } else {
+            showNotification(result.message || 'Failed to delete allowed origin', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting allowed origin:', error);
+        showNotification('Error deleting allowed origin. Please try again.', 'error');
+    }
+}
 
 // Notification
 function showNotification(message, type = 'info') {

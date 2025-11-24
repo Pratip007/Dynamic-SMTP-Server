@@ -1,8 +1,9 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const { SmtpConfig, LandingPage, LandingPageConfig, EmailLog } = require('../models');
+const { SmtpConfig, LandingPage, LandingPageConfig, EmailLog, AllowedOrigin } = require('../models');
 const { encrypt } = require('../utils/encryption');
 const { testConnection } = require('../services/smtpService');
+const { clearCache } = require('../utils/corsHelper');
 const router = express.Router();
 
 // ==================== SMTP Configs ====================
@@ -477,6 +478,7 @@ router.get('/email-logs', async (req, res) => {
       const logObj = log.toObject();
       
       // Handle landing_page_id - check if it's populated (object) or just an ObjectId
+    
       if (logObj.landing_page_id) {
         if (typeof logObj.landing_page_id === 'object' && logObj.landing_page_id._id) {
           // It's populated, ensure id field exists
@@ -519,6 +521,274 @@ router.get('/email-logs', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch email logs',
+    });
+  }
+});
+
+// ==================== Allowed Origins (CORS) ====================
+
+/**
+ * GET /admin/api/allowed-origins
+ * List all allowed origins
+ */
+router.get('/allowed-origins', async (req, res) => {
+  console.log('GET /admin/api/allowed-origins - Route hit');
+  try {
+    const origins = await AllowedOrigin.find()
+      .sort({ createdAt: -1 });
+    
+    const originsWithId = origins.map(origin => {
+      const originObj = origin.toObject();
+      originObj.id = originObj._id.toString();
+      return originObj;
+    });
+    
+    res.json({
+      success: true,
+      data: originsWithId,
+    });
+  } catch (error) {
+    console.error('Error fetching allowed origins:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch allowed origins',
+    });
+  }
+});
+
+/**
+ * POST /admin/api/allowed-origins
+ * Create new allowed origin
+ */
+router.post(
+  '/allowed-origins',
+  [
+    body('origin')
+      .notEmpty()
+      .withMessage('Origin is required')
+      .isString()
+      .withMessage('Origin must be a string'),
+    body('description')
+      .optional()
+      .isString()
+      .withMessage('Description must be a string'),
+  ],
+  async (req, res) => {
+    // Ensure JSON response
+    res.setHeader('Content-Type', 'application/json');
+    
+    try {
+      console.log('POST /admin/allowed-origins - Request received:', {
+        origin: req.body.origin,
+        description: req.body.description,
+        body: req.body,
+      });
+      
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        console.log('Validation errors:', errors.array());
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: errors.array(),
+        });
+      }
+      
+      const { origin, description } = req.body;
+      
+      // Normalize origin
+      let normalizedOrigin = origin.trim();
+      if (normalizedOrigin !== '*') {
+        // Remove trailing slashes
+        normalizedOrigin = normalizedOrigin.replace(/\/+$/, '');
+        
+        // If it doesn't start with http:// or https://, add https://
+        if (!normalizedOrigin.startsWith('http://') && !normalizedOrigin.startsWith('https://')) {
+          normalizedOrigin = `https://${normalizedOrigin}`;
+        }
+        
+        try {
+          const url = new URL(normalizedOrigin);
+          // Extract only protocol and host (remove path, query, hash)
+          normalizedOrigin = `${url.protocol}//${url.host}`;
+        } catch (e) {
+          // Invalid URL, return error
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid origin format. Must be a valid URL (e.g., https://example.com) or *. Error: ' + e.message,
+          });
+        }
+      }
+      
+      // Check if origin already exists
+      const existing = await AllowedOrigin.findOne({ origin: normalizedOrigin });
+      if (existing) {
+        return res.status(400).json({
+          success: false,
+          message: 'Origin already exists',
+        });
+      }
+      
+      const newOrigin = await AllowedOrigin.create({
+        origin: normalizedOrigin,
+        description: description || '',
+        is_active: true,
+      });
+      
+      const originObj = newOrigin.toObject();
+      originObj.id = originObj._id.toString();
+      
+      // Clear CORS cache to apply changes immediately
+      clearCache();
+      
+      res.status(201).json({
+        success: true,
+        message: 'Allowed origin created successfully',
+        data: originObj,
+      });
+    } catch (error) {
+      console.error('Error creating allowed origin:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to create allowed origin: ' + (error.message || 'Unknown error'),
+      });
+    }
+  }
+);
+
+/**
+ * PUT /admin/allowed-origins/:id
+ * Update allowed origin
+ */
+router.put(
+  '/allowed-origins/:id',
+  [
+    body('origin')
+      .optional()
+      .isString()
+      .withMessage('Origin must be a string'),
+    body('description')
+      .optional()
+      .isString()
+      .withMessage('Description must be a string'),
+    body('is_active')
+      .optional()
+      .isBoolean()
+      .withMessage('is_active must be a boolean'),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: errors.array(),
+        });
+      }
+      
+      const origin = await AllowedOrigin.findById(req.params.id);
+      if (!origin) {
+        return res.status(404).json({
+          success: false,
+          message: 'Allowed origin not found',
+        });
+      }
+      
+      const updateData = {};
+      
+      if (req.body.origin !== undefined) {
+        let normalizedOrigin = req.body.origin.trim();
+        if (normalizedOrigin !== '*') {
+          if (!normalizedOrigin.startsWith('http://') && !normalizedOrigin.startsWith('https://')) {
+            normalizedOrigin = `https://${normalizedOrigin}`;
+          }
+          try {
+            const url = new URL(normalizedOrigin);
+            normalizedOrigin = `${url.protocol}//${url.host}`;
+          } catch (e) {
+            return res.status(400).json({
+              success: false,
+              message: 'Invalid origin format',
+            });
+          }
+        }
+        
+        // Check if another origin with same value exists
+        const existing = await AllowedOrigin.findOne({ 
+          origin: normalizedOrigin,
+          _id: { $ne: req.params.id }
+        });
+        if (existing) {
+          return res.status(400).json({
+            success: false,
+            message: 'Origin already exists',
+          });
+        }
+        
+        updateData.origin = normalizedOrigin;
+      }
+      
+      if (req.body.description !== undefined) {
+        updateData.description = req.body.description;
+      }
+      
+      if (req.body.is_active !== undefined) {
+        updateData.is_active = req.body.is_active;
+      }
+      
+      Object.assign(origin, updateData);
+      await origin.save();
+      
+      const originObj = origin.toObject();
+      originObj.id = originObj._id.toString();
+      
+      // Clear CORS cache to apply changes immediately
+      clearCache();
+      
+      res.json({
+        success: true,
+        message: 'Allowed origin updated successfully',
+        data: originObj,
+      });
+    } catch (error) {
+      console.error('Error updating allowed origin:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to update allowed origin',
+      });
+    }
+  }
+);
+
+/**
+ * DELETE /admin/allowed-origins/:id
+ * Delete allowed origin
+ */
+router.delete('/allowed-origins/:id', async (req, res) => {
+  try {
+    const origin = await AllowedOrigin.findById(req.params.id);
+    if (!origin) {
+      return res.status(404).json({
+        success: false,
+        message: 'Allowed origin not found',
+      });
+    }
+    
+    await AllowedOrigin.findByIdAndDelete(req.params.id);
+    
+    // Clear CORS cache to apply changes immediately
+    clearCache();
+    
+    res.json({
+      success: true,
+      message: 'Allowed origin deleted successfully',
+    });
+  } catch (error) {
+    console.error('Error deleting allowed origin:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete allowed origin',
     });
   }
 });

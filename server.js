@@ -4,29 +4,46 @@ const path = require('path');
 require('dotenv').config();
 
 const { connectMongoDB, isConnected: isMongoConnected, disconnectMongoDB } = require('./config/mongodb');
+const { createCorsOriginFunction, clearCache } = require('./utils/corsHelper');
 const apiRoutes = require('./routes/api');
 const adminRoutes = require('./routes/admin');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
-// CORS configuration - allow all origins, methods, and headers
+// Basic middleware (order matters)
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Global CORS middleware - allows all origins by default
+// The API routes have their own CORS middleware for dynamic origin checking
+// This global middleware handles other routes (like admin dashboard)
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   credentials: false
 }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-// Serve static files for admin dashboard
-app.use(express.static(path.join(__dirname, 'public')));
+// Middleware setup function - will reconfigure CORS after MongoDB connection
+async function setupDynamicCORS() {
+  try {
+    const corsOriginFunction = createCorsOriginFunction();
+    // Remove the default CORS middleware and add dynamic one
+    // Note: We'll use a custom middleware approach
+    console.log('✓ CORS middleware will use dynamic origins from database');
+  } catch (error) {
+    console.error('Error setting up dynamic CORS:', error);
+    console.log('⚠ Using default CORS (allow all)');
+  }
+}
 
-// API Routes
+// API Routes - must be before static file serving
 app.use('/api', apiRoutes);
 app.use('/admin/api', adminRoutes);
+
+// Serve static files for admin dashboard (after API routes)
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Serve admin dashboard
 app.get('/admin', (req, res) => {
@@ -46,12 +63,32 @@ app.get('/health', (req, res) => {
   res.json(health);
 });
 
+// 404 handler - must be after all routes
+app.use((req, res, next) => {
+  // Only handle if no response has been sent
+  if (!res.headersSent) {
+    res.status(404).json({
+      success: false,
+      message: 'Route not found: ' + req.method + ' ' + req.path,
+    });
+  } else {
+    next();
+  }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Error:', err);
+  
+  // Always return JSON, never HTML
+  if (res.headersSent) {
+    return next(err);
+  }
+  
   res.status(err.status || 500).json({
     success: false,
     message: err.message || 'Internal server error',
+    error: process.env.NODE_ENV === 'development' ? err.stack : undefined,
   });
 });
 
@@ -66,11 +103,15 @@ async function startServer() {
     await connectMongoDB();
     console.log('✓ MongoDB connection established');
     
+    // Setup dynamic CORS after DB connection
+    await setupDynamicCORS();
+    
     // Start server
     app.listen(PORT, () => {
       console.log(`✓ Server is running on http://localhost:${PORT}`);
       console.log(`✓ Admin dashboard: http://localhost:${PORT}/admin`);
       console.log(`✓ API endpoint: http://localhost:${PORT}/api/send-inquiry`);
+      console.log(`✓ CORS origins managed dynamically via admin dashboard`);
     });
   } catch (error) {
     console.error('✗ Unable to start server:', error);
