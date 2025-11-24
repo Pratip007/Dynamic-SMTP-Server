@@ -60,9 +60,6 @@ app.get('/health', (req, res) => {
       mongodb: isMongoConnected() ? 'connected' : 'disconnected'
     }
   };
-  
-  // Set CORS headers for health check
-  res.header('Access-Control-Allow-Origin', '*');
   res.json(health);
 });
 
@@ -70,10 +67,6 @@ app.get('/health', (req, res) => {
 app.use((req, res, next) => {
   // Only handle if no response has been sent
   if (!res.headersSent) {
-    // Set CORS headers for 404 responses
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
     res.status(404).json({
       success: false,
       message: 'Route not found: ' + req.method + ' ' + req.path,
@@ -91,11 +84,6 @@ app.use((err, req, res, next) => {
   if (res.headersSent) {
     return next(err);
   }
-  
-  // Set CORS headers for error responses
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
   
   res.status(err.status || 500).json({
     success: false,
