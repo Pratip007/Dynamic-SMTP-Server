@@ -15,14 +15,14 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Global CORS middleware - allows all origins by default
-// The API routes have their own CORS middleware for dynamic origin checking
-// This global middleware handles other routes (like admin dashboard)
+// Global CORS middleware - allows ALL origins
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  credentials: false
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  credentials: false,
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 }));
 
 // Middleware setup function - will reconfigure CORS after MongoDB connection

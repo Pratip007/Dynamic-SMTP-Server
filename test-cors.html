@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CORS Test - SMTP Server</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 5px;
+            border-left: 4px solid #4CAF50;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0 15px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+        label {
+            font-weight: bold;
+            color: #333;
+        }
+        .config-info {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .config-info code {
+            background: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌐 CORS Test - SMTP Server</h1>
+        <p class="subtitle">Test if your SMTP server accepts requests from external websites</p>
+
+        <div class="config-info">
+            <strong>⚙️ Configuration:</strong><br>
+            Server URL: <code id="serverUrl">http://98.71.36.76:3000</code><br>
+            <button onclick="changeServer()">Change Server URL</button>
+        </div>
+
+        <!-- Test 1: Health Check -->
+        <div class="test-section">
+            <h3>Test 1: Health Check (GET)</h3>
+            <p>This tests if the server is reachable and CORS is working for GET requests.</p>
+            <button onclick="testHealth()">Run Health Check</button>
+            <div id="healthResult"></div>
+        </div>
+
+        <!-- Test 2: Send Inquiry -->
+        <div class="test-section">
+            <h3>Test 2: Send Inquiry (POST)</h3>
+            <p>This tests if the server accepts POST requests with form data.</p>
+            
+            <label>Landing Page ID:</label>
+            <input type="text" id="landingPageId" value="example-landing-page" placeholder="example-landing-page">
+            
+            <label>Name:</label>
+            <input type="text" id="name" value="Test User" placeholder="John Doe">
+            
+            <label>Email:</label>
+            <input type="email" id="email" value="test@example.com" placeholder="test@example.com">
+            
+            <label>Phone:</label>
+            <input type="tel" id="phone" value="123-456-7890" placeholder="123-456-7890">
+            
+            <label>Message:</label>
+            <textarea id="message" rows="3" placeholder="Your message here">This is a CORS test from an external website.</textarea>
+            
+            <button onclick="testSendInquiry()">Send Test Inquiry</button>
+            <div id="inquiryResult"></div>
+        </div>
+
+        <!-- Test 3: CORS Headers Check -->
+        <div class="test-section">
+            <h3>Test 3: CORS Headers Check</h3>
+            <p>This checks what CORS headers the server is sending.</p>
+            <button onclick="testCorsHeaders()">Check CORS Headers</button>
+            <div id="corsResult"></div>
+        </div>
+    </div>
+
+    <script>
+        let SERVER_URL = 'http://98.71.36.76:3000';
+
+        function changeServer() {
+            const newUrl = prompt('Enter server URL (e.g., http://98.71.36.76:3000 or https://dynamic-smtp-server.onrender.com):', SERVER_URL);
+            if (newUrl) {
+                SERVER_URL = newUrl.replace(/\/$/, ''); // Remove trailing slash
+                document.getElementById('serverUrl').textContent = SERVER_URL;
+                alert('Server URL updated to: ' + SERVER_URL);
+            }
+        }
+
+        function showResult(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.className = 'result ' + type;
+            element.textContent = message;
+        }
+
+        async function testHealth() {
+            showResult('healthResult', '⏳ Testing...', 'info');
+            
+            try {
+                const response = await fetch(`${SERVER_URL}/health`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResult('healthResult', 
+                        `✅ SUCCESS!\n\nStatus: ${response.status}\nResponse: ${JSON.stringify(data, null, 2)}`, 
+                        'success'
+                    );
+                } else {
+                    showResult('healthResult', 
+                        `⚠️ Server responded but with error\n\nStatus: ${response.status}\nResponse: ${JSON.stringify(data, null, 2)}`, 
+                        'error'
+                    );
+                }
+            } catch (error) {
+                showResult('healthResult', 
+                    `❌ FAILED!\n\nError: ${error.message}\n\nThis usually means:\n1. Server is not running\n2. CORS is blocking the request\n3. Network/firewall issue`, 
+                    'error'
+                );
+            }
+        }
+
+        async function testSendInquiry() {
+            showResult('inquiryResult', '⏳ Sending inquiry...', 'info');
+            
+            const landingPageId = document.getElementById('landingPageId').value;
+            const name = document.getElementById('name').value;
+            const email = document.getElementById('email').value;
+            const phone = document.getElementById('phone').value;
+            const message = document.getElementById('message').value;
+            
+            if (!landingPageId) {
+                showResult('inquiryResult', '❌ Landing Page ID is required!', 'error');
+                return;
+            }
+            
+            const payload = {
+                landingPageId: landingPageId,
+                formData: {
+                    name: name,
+                    email: email,
+                    phone: phone,
+                    message: message
+                }
+            };
+            
+            try {
+                const response = await fetch(`${SERVER_URL}/api/send-inquiry`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    showResult('inquiryResult', 
+                        `✅ SUCCESS! Email sent!\n\nStatus: ${response.status}\nMessage: ${data.message}\nMessage ID: ${data.messageId || 'N/A'}`, 
+                        'success'
+                    );
+                } else {
+                    showResult('inquiryResult', 
+                        `⚠️ Request completed but failed\n\nStatus: ${response.status}\nResponse: ${JSON.stringify(data, null, 2)}`, 
+                        'error'
+                    );
+                }
+            } catch (error) {
+                showResult('inquiryResult', 
+                    `❌ FAILED!\n\nError: ${error.message}\n\nPossible reasons:\n1. CORS is blocking the request\n2. Server is not running\n3. Landing page not configured\n4. SMTP not configured`, 
+                    'error'
+                );
+            }
+        }
+
+        async function testCorsHeaders() {
+            showResult('corsResult', '⏳ Checking CORS headers...', 'info');
+            
+            try {
+                const response = await fetch(`${SERVER_URL}/api/send-inquiry`, {
+                    method: 'OPTIONS',
+                    headers: {
+                        'Origin': window.location.origin,
+                        'Access-Control-Request-Method': 'POST',
+                        'Access-Control-Request-Headers': 'Content-Type'
+                    }
+                });
+                
+                const headers = {};
+                for (let [key, value] of response.headers.entries()) {
+                    if (key.toLowerCase().includes('access-control') || key.toLowerCase().includes('allow')) {
+                        headers[key] = value;
+                    }
+                }
+                
+                if (Object.keys(headers).length > 0) {
+                    showResult('corsResult', 
+                        `✅ CORS Headers Found!\n\nStatus: ${response.status}\n\nHeaders:\n${JSON.stringify(headers, null, 2)}`, 
+                        'success'
+                    );
+                } else {
+                    showResult('corsResult', 
+                        `⚠️ No CORS headers found\n\nStatus: ${response.status}\n\nThis might mean CORS is not configured properly.`, 
+                        'error'
+                    );
+                }
+            } catch (error) {
+                showResult('corsResult', 
+                    `❌ FAILED!\n\nError: ${error.message}\n\nCannot check CORS headers - server might be unreachable.`, 
+                    'error'
+                );
+            }
+        }
+
+        // Auto-run health check on page load
+        window.addEventListener('load', () => {
+            console.log('CORS Test Page Loaded');
+            console.log('Server URL:', SERVER_URL);
+            console.log('This page origin:', window.location.origin);
+        });
+    </script>
+</body>
+</html>
+
