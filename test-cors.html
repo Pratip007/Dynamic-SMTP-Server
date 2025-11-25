@@ -270,23 +270,27 @@
                     }
                 });
                 
-                const headers = {};
+                // Collect all headers
+                const allHeaders = {};
+                const corsHeaders = {};
                 for (let [key, value] of response.headers.entries()) {
+                    allHeaders[key] = value;
                     if (key.toLowerCase().includes('access-control') || key.toLowerCase().includes('allow')) {
-                        headers[key] = value;
+                        corsHeaders[key] = value;
                     }
                 }
                 
-                if (Object.keys(headers).length > 0) {
-                    showResult('corsResult', 
-                        `✅ CORS Headers Found!\n\nStatus: ${response.status}\n\nHeaders:\n${JSON.stringify(headers, null, 2)}`, 
-                        'success'
-                    );
+                let result = `Status: ${response.status} ${response.statusText}\n\n`;
+                
+                if (Object.keys(corsHeaders).length > 0) {
+                    result += `✅ CORS Headers Found!\n\n${JSON.stringify(corsHeaders, null, 2)}`;
+                    showResult('corsResult', result, 'success');
                 } else {
-                    showResult('corsResult', 
-                        `⚠️ No CORS headers found\n\nStatus: ${response.status}\n\nThis might mean CORS is not configured properly.`, 
-                        'error'
-                    );
+                    result += `⚠️ No CORS headers visible to JavaScript\n\n`;
+                    result += `Note: Browsers hide CORS headers from JavaScript for security.\n`;
+                    result += `If you got a 200/204 status, CORS is likely working!\n\n`;
+                    result += `All visible headers:\n${JSON.stringify(allHeaders, null, 2)}`;
+                    showResult('corsResult', result, 'info');
                 }
             } catch (error) {
                 showResult('corsResult', 
